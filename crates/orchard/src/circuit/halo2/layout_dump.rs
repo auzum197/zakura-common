@@ -104,3 +104,67 @@ fn dump_ironwood_action_fixtures() {
         println!("wrote {}", path.display());
     }
 }
+
+/// Preserve the generator-table fill order of the address signature capture: the
+/// order of the table columns `(index, x, y)`.
+#[cfg(feature = "address-signatures")]
+const ADDRESS_SIGNATURE_FILL_COLUMN_ORDER: &[usize] = &[10, 11, 12];
+
+/// Writes the constraint system and the keygen layout of the address signature
+/// circuit, in Ironwood's JSON formats.
+///
+/// The Lean soundness proof in `formal/address-signature-circuit` has a model of
+/// this layout. `scripts/check_layout.py` in that project compares the model with
+/// `addressSignatureLayout.json`.
+///
+/// Run with:
+/// `ADDRESS_SIGNATURE_FIXTURE_OUT=/path/to/fixtures cargo test -p zakura-orchard --lib \
+///   circuit::halo2::layout_dump::dump_address_signature_fixtures \
+///   --features circuit-fixtures,address-signatures -- --ignored --nocapture`
+#[cfg(feature = "address-signatures")]
+#[test]
+#[ignore = "writes generated address signature fixture files"]
+fn dump_address_signature_fixtures() {
+    use std::fs;
+    use std::path::PathBuf;
+    use std::println;
+
+    use super::address_signature::Circuit;
+
+    let output_dir = PathBuf::from(
+        std::env::var_os("ADDRESS_SIGNATURE_FIXTURE_OUT")
+            .expect("set ADDRESS_SIGNATURE_FIXTURE_OUT to the destination fixture directory"),
+    );
+    fs::create_dir_all(&output_dir).expect("create fixture output directory");
+
+    let circuit = Circuit::empty();
+    let mut meta = ConstraintSystem::<pallas::Base>::default();
+    let config = <Circuit as Halo2Circuit<pallas::Base>>::configure(&mut meta);
+    let constants = meta.lean_dump_constants();
+    let mut recorder = CircuitFixtureRecorder::default();
+    <Circuit as Halo2Circuit<pallas::Base>>::FloorPlanner::synthesize(
+        &mut recorder,
+        &circuit,
+        config,
+        constants,
+    )
+    .expect("synthesis should succeed");
+
+    let fixtures = [
+        (
+            "addressSignaturePost.json",
+            recorder.render_cs_json(&meta, 1 << K),
+        ),
+        (
+            "addressSignatureLayout.json",
+            recorder.render_layout_json(&meta, K, ADDRESS_SIGNATURE_FILL_COLUMN_ORDER),
+        ),
+    ];
+    for (name, contents) in fixtures {
+        let path = output_dir.join(name);
+        fs::write(&path, contents).unwrap_or_else(|error| {
+            panic!("write {}: {}", path.display(), error);
+        });
+        println!("wrote {}", path.display());
+    }
+}

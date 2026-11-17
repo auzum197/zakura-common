@@ -44,6 +44,13 @@
 //! address construction from diversifiers and note decryption
 //! remain available without it.
 //!
+//! ## Address signatures
+//!
+//! The opt-in `address-signatures` feature provides off-chain signatures that bind
+//! a message to an Orchard address: spend-authority signatures, which contain a
+//! Halo 2 proof and need `prover` or `verifier`, and receive-authority signatures.
+//! It requires `backend-halo2`.
+//!
 
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -72,6 +79,9 @@ compile_error!("select an Orchard backend: backend-halo2 or backend-sensei");
 
 mod action;
 mod address;
+#[cfg(feature = "address-signatures")]
+#[cfg_attr(docsrs, doc(cfg(feature = "address-signatures")))]
+pub mod address_signature;
 mod backend;
 pub mod builder;
 pub mod bundle;
