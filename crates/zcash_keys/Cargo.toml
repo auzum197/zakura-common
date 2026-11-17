@@ -60,6 +60,9 @@ wallet = ["dep:zip32", "orchard?/wallet", "sapling?/wallet", "transparent/wallet
 zip32-addresses = ["wallet", "orchard?/zip32-addresses", "sapling?/zip32-addresses"]
 default = ["backend-halo2", "wallet", "std", "zip32-addresses"]
 orchard = ["dep:orchard", "wallet"]
+# Off-chain Orchard address signatures. The `orchard` crate has the schemes; this
+# feature lets a consumer enable them through this crate.
+orchard-address-signatures = ["orchard", "orchard/address-signatures"]
 sapling = ["dep:sapling", "wallet"]
 std = [
     "orchard?/std",
