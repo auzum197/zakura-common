@@ -179,10 +179,12 @@ pub struct EccConfig<
 
     /// Fixed-base full-width scalar multiplication
     mul_fixed_full: mul_fixed::full_width::Config<FixedPoints>,
-    /// Fixed-base signed short scalar multiplication
-    mul_fixed_short: mul_fixed::short::Config<FixedPoints>,
-    /// Fixed-base mul using a base field element as a scalar
-    mul_fixed_base_field: mul_fixed::base_field_elem::Config<FixedPoints, Lookup>,
+    /// Fixed-base signed short scalar multiplication. `None` if the chip was
+    /// configured with [`EccChip::configure_full_width_fixed_base_only`].
+    mul_fixed_short: Option<mul_fixed::short::Config<FixedPoints>>,
+    /// Fixed-base mul using a base field element as a scalar. `None` if the chip was
+    /// configured with [`EccChip::configure_full_width_fixed_base_only`].
+    mul_fixed_base_field: Option<mul_fixed::base_field_elem::Config<FixedPoints, Lookup>>,
 
     /// Witness point
     witness_point: witness_point::Config,
@@ -312,6 +314,41 @@ impl<FixedPoints: super::FixedPoints<pallas::Affine>, Lookup: PallasLookupRangeC
         lagrange_coeffs: [Column<Fixed>; 8],
         range_check: Lookup,
     ) -> <Self as Chip<pallas::Base>>::Config {
+        Self::configure_inner(meta, advices, lagrange_coeffs, range_check, true)
+    }
+
+    /// Configures the chip without the gates for fixed-base scalar multiplication by
+    /// a signed short scalar or by a base field element.
+    ///
+    /// The gates that this creates are the gates that [`EccChip::configure`] creates
+    /// for point witnessing, point addition, variable-base scalar multiplication, and
+    /// full-width fixed-base scalar multiplication. A circuit that uses only these
+    /// operations gets a smaller proof, because it does not carry the unused gates.
+    ///
+    /// On a chip with this configuration, [`EccInstructions::mul_fixed_short`],
+    /// [`EccInstructions::mul_fixed_base_field_elem`], and
+    /// [`EccInstructions::mul_sign`] return [`Error::Synthesis`].
+    ///
+    /// # Side effects
+    ///
+    /// All columns in `advices` will be equality-enabled.
+    pub fn configure_full_width_fixed_base_only(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        advices: [Column<Advice>; 10],
+        lagrange_coeffs: [Column<Fixed>; 8],
+        range_check: Lookup,
+    ) -> <Self as Chip<pallas::Base>>::Config {
+        Self::configure_inner(meta, advices, lagrange_coeffs, range_check, false)
+    }
+
+    #[allow(non_snake_case)]
+    fn configure_inner(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        advices: [Column<Advice>; 10],
+        lagrange_coeffs: [Column<Fixed>; 8],
+        range_check: Lookup,
+        with_short_and_base_field: bool,
+    ) -> <Self as Chip<pallas::Base>>::Config {
         // Create witness point gate
         let witness_point = witness_point::Config::configure(meta, advices[0], advices[1]);
         // Create incomplete point addition gate
@@ -329,31 +366,43 @@ impl<FixedPoints: super::FixedPoints<pallas::Affine>, Lookup: PallasLookupRangeC
 
         // Create config that is shared across short, base-field, and full-width
         // fixed-base scalar mul.
-        let mul_fixed = mul_fixed::Config::<FixedPoints>::configure(
-            meta,
-            lagrange_coeffs,
-            advices[4],
-            advices[5],
-            add,
-            add_incomplete,
-        );
+        let mul_fixed = if with_short_and_base_field {
+            mul_fixed::Config::<FixedPoints>::configure(
+                meta,
+                lagrange_coeffs,
+                advices[4],
+                advices[5],
+                add,
+                add_incomplete,
+            )
+        } else {
+            mul_fixed::Config::<FixedPoints>::configure_full_width_only(
+                meta,
+                lagrange_coeffs,
+                advices[4],
+                advices[5],
+                add,
+                add_incomplete,
+            )
+        };
 
         // Create gate that is only used in full-width fixed-base scalar mul.
         let mul_fixed_full =
             mul_fixed::full_width::Config::<FixedPoints>::configure(meta, mul_fixed.clone());
 
         // Create gate that is only used in short fixed-base scalar mul.
-        let mul_fixed_short =
-            mul_fixed::short::Config::<FixedPoints>::configure(meta, mul_fixed.clone());
+        let mul_fixed_short = with_short_and_base_field
+            .then(|| mul_fixed::short::Config::<FixedPoints>::configure(meta, mul_fixed.clone()));
 
         // Create gate that is only used in fixed-base mul using a base field element.
-        let mul_fixed_base_field =
+        let mul_fixed_base_field = with_short_and_base_field.then(|| {
             mul_fixed::base_field_elem::Config::<FixedPoints, Lookup>::configure(
                 meta,
                 advices[6..9].try_into().unwrap(),
                 range_check,
                 mul_fixed,
-            );
+            )
+        });
 
         EccConfig {
             advices,
@@ -605,7 +654,11 @@ where
     ) -> Result<Self::Point, Error> {
         // Multiply point by sign, using the same gate as mul_fixed::short.
         // This also constrains sign to be in {-1, 1}.
-        let config_short = self.config().mul_fixed_short.clone();
+        let config_short = self
+            .config()
+            .mul_fixed_short
+            .clone()
+            .ok_or(Error::Synthesis)?;
         config_short.assign_scalar_sign(
             layouter.namespace(|| "variable-base sign-scalar mul"),
             sign,
@@ -653,7 +706,11 @@ where
         scalar: &Self::ScalarFixedShort,
         base: &<Self::FixedPoints as FixedPoints<pallas::Affine>>::ShortScalar,
     ) -> Result<(Self::Point, Self::ScalarFixedShort), Error> {
-        let config = self.config().mul_fixed_short.clone();
+        let config = self
+            .config()
+            .mul_fixed_short
+            .clone()
+            .ok_or(Error::Synthesis)?;
         config.assign(
             layouter.namespace(|| format!("short fixed-base mul of {:?}", base)),
             scalar,
@@ -667,7 +724,11 @@ where
         base_field_elem: AssignedCell<pallas::Base, pallas::Base>,
         base: &<Self::FixedPoints as FixedPoints<pallas::Affine>>::Base,
     ) -> Result<Self::Point, Error> {
-        let config = self.config().mul_fixed_base_field.clone();
+        let config = self
+            .config()
+            .mul_fixed_base_field
+            .clone()
+            .ok_or(Error::Synthesis)?;
         config.assign(
             layouter.namespace(|| format!("base-field elem fixed-base mul of {:?}", base)),
             base_field_elem,

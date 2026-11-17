@@ -767,6 +767,12 @@ impl IncomingViewingKey {
     pub fn prepare(&self) -> PreparedIncomingViewingKey {
         PreparedIncomingViewingKey::new(self)
     }
+
+    /// Returns $\mathsf{ivk}$ as a scalar, for receive-authority signatures.
+    #[cfg(feature = "address-signatures")]
+    pub(crate) fn key_agreement_scalar(&self) -> &NonZeroPallasScalar {
+        &self.ivk.0
+    }
 }
 
 /// An Orchard incoming viewing key that has been precomputed for trial decryption.

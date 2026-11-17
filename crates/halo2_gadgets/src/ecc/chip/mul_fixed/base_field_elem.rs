@@ -178,7 +178,7 @@ impl<Fixed: FixedPoints<pallas::Affine>, Lookup: PallasLookupRangeCheck> Config<
 
                 // Decompose scalar
                 let scalar = {
-                    let running_sum = self.super_config.running_sum_config.copy_decompose(
+                    let running_sum = self.super_config.running_sum_config().copy_decompose(
                         &mut region,
                         offset,
                         scalar.clone(),
@@ -197,7 +197,7 @@ impl<Fixed: FixedPoints<pallas::Affine>, Lookup: PallasLookupRangeCheck> Config<
                     offset,
                     &(&scalar).into(),
                     base,
-                    self.super_config.running_sum_config.q_range_check(),
+                    self.super_config.running_sum_config().q_range_check(),
                 )?;
 
                 Ok((scalar, acc, mul_b))

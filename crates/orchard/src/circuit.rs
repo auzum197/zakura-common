@@ -15,6 +15,9 @@ mod sensei;
 #[cfg(feature = "circuit-composition")]
 pub mod composition;
 
+#[cfg(feature = "address-signatures")]
+pub(crate) use halo2::address_signature;
+
 #[cfg(feature = "backend-halo2")]
 use halo2 as selected;
 #[cfg(feature = "backend-sensei")]

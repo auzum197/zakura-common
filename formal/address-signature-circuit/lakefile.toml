@@ -1,0 +1,18 @@
+name = "AddressSignature"
+version = "0.1.0"
+defaultTargets = ["AddressSignature"]
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+
+# The Ironwood formalization (https://github.com/zcash/ironwood). It supplies the
+# Pallas curve, the group law, the Sinsemilla specification and generator table,
+# the fixed-base window tables, and the gate-level lemmas of the audited chips.
+[[require]]
+name = "Zcash"
+git = "https://github.com/zcash/ironwood"
+rev = "ab5d90f510a4d1bc9833c139600caeac4dbd19dd"
+
+[[lean_lib]]
+name = "AddressSignature"

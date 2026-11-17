@@ -13,7 +13,7 @@ repository.workspace = true
 readme.workspace = true
 
 [package.metadata.docs.rs]
-features = ["test-dependencies", "unstable-frost", "weighted-merkle", "circuit-composition"]
+features = ["test-dependencies", "unstable-frost", "weighted-merkle", "circuit-composition", "address-signatures"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [lib]
@@ -26,6 +26,7 @@ orchard-legacy = { workspace = true, optional = true }
 maybe-rayon = { version = "0.1.0", default-features = false, optional = true }
 plotters = { version = "0.3.0", optional = true }
 aes = { version = "0.9", optional = true }
+base64 = { version = "0.22", default-features = false, features = ["alloc"], optional = true }
 blake2b_simd = { version = "1", default-features = false }
 corez = { version = "0.1.1", features = ["alloc"], default-features = false }
 fpe = { version = "0.7", features = ["alloc"], default-features = false, optional = true }
@@ -88,6 +89,9 @@ test-dependencies = ["wallet", "sensei?/test-dependencies", "orchard-legacy?/tes
 # Backend-specific components and typed witnesses for external circuit composition.
 circuit-composition = ["backend-halo2", "prover"]
 unstable-frost = ["dep:visibility"]
+# Off-chain Orchard address signatures: spend authority (needs `prover` or
+# `verifier`) and receive authority. Supported on the Halo2 backend only.
+address-signatures = ["backend-halo2", "dep:base64"]
 # Historical fingerprint fixtures use ZIP 32 indexed addresses.
 verifier-fingerprint = ["orchard-legacy?/verifier-fingerprint", "zip32-addresses", "circuit"]
 # Retained feature alias; historical formal-model tapes are replayed in tests.

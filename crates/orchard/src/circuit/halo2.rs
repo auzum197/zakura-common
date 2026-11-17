@@ -66,6 +66,8 @@ use crate::{
     value::{NoteValue, ValueCommitTrapdoor},
 };
 
+#[cfg(feature = "address-signatures")]
+pub(crate) mod address_signature;
 pub(in crate::circuit) mod commit_ivk;
 pub mod gadget;
 pub(in crate::circuit) mod note_commit;
