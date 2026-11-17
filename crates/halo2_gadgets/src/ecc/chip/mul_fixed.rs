@@ -314,7 +314,9 @@ fn cached_window_witnesses<F: FixedPoint<pallas::Affine>, const NUM_WINDOWS: usi
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Config<FixedPoints: super::FixedPoints<pallas::Affine>> {
-    running_sum_config: RunningSumConfig<pallas::Base, FIXED_BASE_WINDOW_SIZE>,
+    // The running sum decomposition that short and base-field-element scalars use.
+    // `None` if only full-width fixed-base scalar mul is configured.
+    running_sum_config: Option<RunningSumConfig<pallas::Base, FIXED_BASE_WINDOW_SIZE>>,
     // The fixed Lagrange interpolation coefficients for `x_p`.
     lagrange_coeffs: [Column<Fixed>; H],
     // The fixed `z` for each window such that `y + z = u^2`.
@@ -341,11 +343,57 @@ impl<FixedPoints: super::FixedPoints<pallas::Affine>> Config<FixedPoints> {
         add_config: add::Config,
         add_incomplete_config: add_incomplete::Config,
     ) -> Self {
+        Self::configure_inner(
+            meta,
+            lagrange_coeffs,
+            window,
+            u,
+            add_config,
+            add_incomplete_config,
+            true,
+        )
+    }
+
+    /// Creates the config for full-width fixed-base scalar mul only.
+    ///
+    /// This does not create the running sum decomposition or its gates, which only
+    /// short and base-field-element scalars use.
+    pub(super) fn configure_full_width_only(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        lagrange_coeffs: [Column<Fixed>; H],
+        window: Column<Advice>,
+        u: Column<Advice>,
+        add_config: add::Config,
+        add_incomplete_config: add_incomplete::Config,
+    ) -> Self {
+        Self::configure_inner(
+            meta,
+            lagrange_coeffs,
+            window,
+            u,
+            add_config,
+            add_incomplete_config,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn configure_inner(
+        meta: &mut ConstraintSystem<pallas::Base>,
+        lagrange_coeffs: [Column<Fixed>; H],
+        window: Column<Advice>,
+        u: Column<Advice>,
+        add_config: add::Config,
+        add_incomplete_config: add_incomplete::Config,
+        with_running_sum: bool,
+    ) -> Self {
         meta.enable_equality(window);
         meta.enable_equality(u);
 
-        let q_running_sum = meta.selector();
-        let running_sum_config = RunningSumConfig::configure(meta, q_running_sum, window);
+        let running_sum_config = with_running_sum.then(|| {
+            let q_running_sum = meta.selector();
+            RunningSumConfig::configure(meta, q_running_sum, window)
+        });
 
         let config = Self {
             running_sum_config,
@@ -378,9 +426,24 @@ impl<FixedPoints: super::FixedPoints<pallas::Affine>> Config<FixedPoints> {
             );
         }
 
-        config.running_sum_coords_gate(meta);
+        if with_running_sum {
+            config.running_sum_coords_gate(meta);
+        }
 
         config
+    }
+
+    /// The running sum decomposition.
+    ///
+    /// # Panics
+    ///
+    /// Panics if this config was created for full-width scalar mul only. The short
+    /// and base-field-element configs, which are the only callers, are not created
+    /// in that case.
+    fn running_sum_config(&self) -> &RunningSumConfig<pallas::Base, FIXED_BASE_WINDOW_SIZE> {
+        self.running_sum_config
+            .as_ref()
+            .expect("the running sum decomposition is configured")
     }
 
     /// Check that each window in the running sum decomposition uses the correct y_p
@@ -395,7 +458,7 @@ impl<FixedPoints: super::FixedPoints<pallas::Affine>> Config<FixedPoints> {
     fn running_sum_coords_gate(&self, meta: &mut ConstraintSystem<pallas::Base>) {
         meta.create_gate("Running sum coordinates check", |meta| {
             let q_mul_fixed_running_sum =
-                meta.query_selector(self.running_sum_config.q_range_check());
+                meta.query_selector(self.running_sum_config().q_range_check());
 
             let z_cur = meta.query_advice(self.window, Rotation::cur());
             let z_next = meta.query_advice(self.window, Rotation::next());

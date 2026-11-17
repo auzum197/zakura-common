@@ -89,7 +89,7 @@ impl<Fixed: FixedPoints<pallas::Affine>> Config<Fixed> {
         let (magnitude, sign) = magnitude_sign;
 
         // Decompose magnitude
-        let running_sum = self.super_config.running_sum_config.copy_decompose(
+        let running_sum = self.super_config.running_sum_config().copy_decompose(
             region,
             offset,
             magnitude.clone(),
@@ -137,7 +137,7 @@ impl<Fixed: FixedPoints<pallas::Affine>> Config<Fixed> {
                         offset,
                         &(&scalar).into(),
                         base,
-                        self.super_config.running_sum_config.q_range_check(),
+                        self.super_config.running_sum_config().q_range_check(),
                     )?;
 
                 Ok((scalar, acc, mul_b))
@@ -559,7 +559,9 @@ pub mod tests {
                 )?
             };
 
-            short_config.assign(layouter, &magnitude_sign.inner, &Short)?;
+            short_config
+                .expect("the full configuration has the short gate")
+                .assign(layouter, &magnitude_sign.inner, &Short)?;
 
             Ok(())
         }
